@@ -1,2 +1,5 @@
 venv
 .env
+uWebSockets
+*.pyc
+__pycache__

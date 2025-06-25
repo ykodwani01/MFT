@@ -1,7 +1,6 @@
 import pandas as pd
 from indicator.trend import *
 import numpy as np
-
 def calculate_profit_loss(
     data: dict,
     df_final: pd.DataFrame,
@@ -11,6 +10,7 @@ def calculate_profit_loss(
     stop_pct,
     type
 ):
+ try:
     """
     For each spinning top date, enter next day:
       - If prior lookback days form downtrend, go LONG; else SHORT.
@@ -33,7 +33,10 @@ def calculate_profit_loss(
       idx = sorted_dates.index(date)
       prev_candle_str = sorted_dates[idx + 1 : idx + lookback]
       prev_candles = [ts[d] for d in prev_candle_str]
-
+    #   print("Heelos")
+    #   print(prev_candles)
+    #   print("HHHSS")
+    #   print(ts)
       if idx == 0:
             continue
       entry_idx   = idx - 1
@@ -91,7 +94,7 @@ def calculate_profit_loss(
 
       # fallback: exit at last available close (chronologically oldest)
       if exit_dt is None:
-          exit_dt    = df.index[-1]
+          exit_dt    = df.index[0]
           exit_price = entry_price
 
       pnl = (exit_price - entry_price) if direction == 'long' else (entry_price - exit_price)
@@ -106,3 +109,6 @@ def calculate_profit_loss(
           'pnl':         pnl
       })
     return total_pnl, trades
+ except:
+    print("Error in calculate_profit_loss")
+    return 0, []
