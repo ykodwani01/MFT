@@ -15,3 +15,9 @@ def is_downtrend(candles, threshold=0.02):
 def is_uptrend(candles, threshold=0.02):
     closes = [float(c["4. close"]) for c in candles]
     return (closes[0] - closes[-1]) > 0
+
+def is_bearish(open_price,close_price):
+    return close_price < open_price
+
+def is_bullish(open_price,close_price):
+    return close_price > open_price

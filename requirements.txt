@@ -1,0 +1,6 @@
+pandas
+mplfinance
+requests
+plotly
+dotenv
+PyYAML
