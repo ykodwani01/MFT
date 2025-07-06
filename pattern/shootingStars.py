@@ -1,72 +1,88 @@
-import pandas as pd
-import numpy as np
 from indicator.trend import *
+import pandas as pd
 
-def is_shooting_star(date, candle,
-                     body_ratio_threshold=0.25,
-                     lower_wick_ratio_max=0.1,
-                     upper_wick_body_ratio_min=2.5):
+class ShootingStar:
+    def __init__(self, data, trend_lookback=7):
+        """
+        Initialize with yfinance DataFrame
+        data: pandas DataFrame with columns [Open, High, Low, Close, Adj Close, Volume]
+        """
+        self.data = data.reset_index()
+        self.trend_lookback = trend_lookback
 
-    open_price = float(candle["1. open"])
-    close_price = float(candle["4. close"])
-    high_price = float(candle["2. high"])
-    low_price = float(candle["3. low"])
+    def _is_shooting_star(self, candle, params):
+        open_price = candle['Open']
+        high_price = candle['High']
+        low_price = candle['Low']
+        close_price = candle['Close']
 
-    high_body = high_price - max(open_price, close_price)
-    body_low = min(open_price, close_price) - low_price
-    body = abs(open_price - close_price)
-    total_range = high_price - low_price
+        body_length = abs(close_price - open_price)
+        total_range = high_price - low_price
+        upper_wick = high_price - max(open_price, close_price)
+        lower_wick = min(open_price, close_price) - low_price
 
-    # Sanity check to avoid division by zero
-    if total_range == 0:
-        return False
+        if total_range == 0:
+            return False  # Prevent division by zero
 
-    # Conditions for a shooting star:
-    # 1. Small real body near the low
-    # 2. Long upper shadow (wick)
-    # 3. Little to no lower shadow
-    if body / total_range > body_ratio_threshold:
-        return False  # Body is too large
+        body_pct = (body_length / total_range) * 100
+        upper_wick_pct = (upper_wick / total_range) * 100
+        lower_wick_pct = (lower_wick / total_range) * 100
 
-    if body_low / total_range > lower_wick_ratio_max:
-        return False  # Lower wick is too large
+        return (
+            body_pct <= params["max_body_pct"] and
+            upper_wick_pct >= params["min_upper_wick_pct"] and
+            lower_wick_pct <= params["max_lower_wick_pct"] and
+            is_bearish(open_price, close_price)
+        )
 
-    if high_body / body < upper_wick_body_ratio_min:
-        return False  # Upper wick not long enough
+    def _extract_candle_details(self, candle, signal_type):
+        return {
+            "date": candle['Date'],
+            "open": candle['Open'],
+            "high": candle['High'],
+            "low": candle['Low'],
+            "close": candle['Close'],
+            "volume": candle['Volume'],
+            "type": signal_type
+        }
 
-    return True
+    def detect_shooting_stars(
+        self,
+        max_body_pct=30.0,
+        min_upper_wick_pct=65.0,
+        max_lower_wick_pct=15.0
+    ):
+        """
+        Detect trend-confirmed Shooting Star candles.
 
-def detect_shooting_star(data,
-                         body_ratio_threshold=0.25,
-                         lower_wick_ratio_max=0.1,
-                         upper_wick_body_ratio_min=2.5):
-    time_series = data.get("Time Series (Daily)", {})
-    results = []
+        Returns:
+            pd.DataFrame: DataFrame of shooting star signals with type: bullish/bearish
+        """
+        params = {
+            "max_body_pct": max_body_pct,
+            "min_upper_wick_pct": min_upper_wick_pct,
+            "max_lower_wick_pct": max_lower_wick_pct
+        }
 
-    for date, candle in time_series.items():
-        if is_shooting_star(date, candle,
-                            body_ratio_threshold,
-                            lower_wick_ratio_max,
-                            upper_wick_body_ratio_min):
-            results.append({
-                "date": date,
-                "open": float(candle["1. open"]),
-                "high": float(candle["2. high"]),
-                "low": float(candle["3. low"]),
-                "close": float(candle["4. close"]),
-                "volume": int(candle["5. volume"])
-            })
+        results = []
+        for i in range(self.trend_lookback, len(self.data)):
+            candle = self.data.iloc[i]
 
-    return results
+            if not self._is_shooting_star(candle, params):
+                continue
 
-def detect_all_shooting_stars(data,
-                               body_ratio_threshold=0.25,
-                               lower_wick_ratio_max=0.1,
-                               upper_wick_body_ratio_min=2.5):
-    results = detect_shooting_star(
-        data,
-        body_ratio_threshold,
-        lower_wick_ratio_max,
-        upper_wick_body_ratio_min
-    )
-    return pd.DataFrame(results)
+            close_series = self.data["Close"].iloc[i - self.trend_lookback:i]
+            dates = self.data["Date"].iloc[i - self.trend_lookback:i]
+            # print(close_series)
+            # print(dates)
+
+            if is_downtrend(close_series):
+                signal_type = "bullish"
+            elif is_uptrend(close_series):
+                signal_type = "bearish"
+            else:
+                continue  # No signal if trend is unclear
+
+            results.append(self._extract_candle_details(candle, signal_type))
+
+        return pd.DataFrame(results)

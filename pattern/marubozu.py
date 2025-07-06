@@ -3,16 +3,22 @@ import pandas as pd
 
 class Marubozu:
     def __init__(self, data):
+        """
+        Initialize with yfinance DataFrame
+        data: pandas DataFrame with columns [Open, High, Low, Close, Adj Close, Volume]
+        """
         self.data = data
 
     def _is_marubozu(self, candle, candle_type, params):
-        open_price = float(candle["1. open"])
-        high_price = float(candle["2. high"])
-        low_price = float(candle["3. low"])
-        close_price = float(candle["4. close"])
-
+        # print(candle)
+        open_price = candle['Open']
+        high_price = candle['High']
+        low_price = candle['Low']
+        close_price = candle['Close']
+        date = candle['Date']
         # Candle body length in %
         candle_length_pct = calculate_candle_length_percentage(open_price, close_price)
+        # print(f"Candle /Length Percentage: {candle_length_pct}")
         if not (params["min_candle_length"] <= candle_length_pct <= params["max_candle_length"]):
             return False
 
@@ -34,29 +40,29 @@ class Marubozu:
         else:
             raise ValueError("candle_type must be either 'bullish' or 'bearish'")
 
-    def _extract_candle_details(self, date, candle, candle_type):
+    def _extract_candle_details(self, candle, candle_type):
         return {
-            "date": date,
+            "date": candle['Date'],
             "type": candle_type,
-            "open": float(candle["1. open"]),
-            "high": float(candle["2. high"]),
-            "low": float(candle["3. low"]),
-            "close": float(candle["4. close"]),
-            "volume": float(candle["5. volume"])
+            "open": candle['Open'],
+            "high": candle['High'],
+            "low": candle['Low'],
+            "close": candle['Close'],
+            "volume": candle['Volume']
         }
 
     def _detect_by_type(self, candle_type, params):
         results = []
-        for date, candle in self.data.items():
+        for index,candle in self.data.iterrows():
             if self._is_marubozu(candle, candle_type, params):
-                results.append(self._extract_candle_details(date, candle, candle_type))
+                results.append(self._extract_candle_details(candle, candle_type))
         return results
 
     def detect_all_marubozus(
         self,
         upper_wick_threshold=1.0,
         lower_wick_threshold=1.0,
-        min_candle_length=1.0,
+        min_candle_length=1.5,
         max_candle_length=10.0
     ):
         """

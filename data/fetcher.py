@@ -1,7 +1,7 @@
 import requests
 from dotenv import load_dotenv
 import os
-
+import yfinance as yf
 class Fetcher:
     def __init__(self):
         load_dotenv()
@@ -24,3 +24,10 @@ class Fetcher:
         data = response.json().get('Time Series (Daily)', {})
         
         return data
+    
+    def fetch_data(self, symbol): 
+        df = yf.download(symbol, period="6mo", interval="1d")
+        df.columns.name = None
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]  # Flatten columns
+        df.reset_index(inplace=True)
+        return df

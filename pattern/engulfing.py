@@ -1,74 +1,68 @@
 from indicator.trend import *
 import pandas as pd
 
-def is_bullish_engulfing(prev_candle, current_candle):
-    prev_open = float(prev_candle["1. open"])
-    prev_close = float(prev_candle["4. close"])
-    current_open = float(current_candle["1. open"])
-    current_close = float(current_candle["4. close"])
+class EngulfingPattern:
+    def __init__(self, data, trend_lookback=7, min_body_pct=0.7):
+        """
+        data: DataFrame with OHLCV (from yfinance)
+        trend_lookback: candles to consider for trend check
+        min_body_pct: minimum body size (as % of range) to be considered a strong candle
+        """
+        self.data = data.reset_index()
+        self.trend_lookback = trend_lookback
+        self.min_body_pct = min_body_pct
 
-    return (prev_close < prev_open and current_close > current_open and
-            current_open < prev_close and current_close > prev_open)
+    def _body_pct(self, candle):
+        body = abs(candle["Close"] - candle["Open"])
+        rng = candle["High"] - candle["Low"]
+        return (body / rng) * 100 if rng > 0 else 0
 
-def is_bearish_engulfing(prev_candle, current_candle):
-    prev_open = float(prev_candle["1. open"])
-    prev_close = float(prev_candle["4. close"])
-    current_open = float(current_candle["1. open"])
-    current_close = float(current_candle["4. close"])
+    def _is_bullish_engulfing(self, prev_candle, curr_candle):
+        return (
+            is_bearish(prev_candle['Open'], prev_candle['Close']) and
+            is_bullish(curr_candle['Open'], curr_candle['Close']) and
+            curr_candle['Open'] < prev_candle['Close'] and
+            curr_candle['Close'] > prev_candle['Open']
+        )
 
-    return (prev_close > prev_open and current_close < current_open and
-            current_open > prev_close and current_close < prev_open)
+    def _is_bearish_engulfing(self, prev_candle, curr_candle):
+        return (
+            is_bullish(prev_candle['Open'], prev_candle['Close']) and
+            is_bearish(curr_candle['Open'], curr_candle['Close']) and
+            curr_candle['Open'] > prev_candle['Close'] and
+            curr_candle['Close'] < prev_candle['Open']
+        )
 
-def detect_all_engulfing(data, lookback=5):
-    time_series = data.get("Time Series (Daily)", {})
-    if not time_series:
-        raise ValueError("Missing 'Time Series (Daily)' in input data.")
+    def _extract_candle_details(self, candle, signal_type):
+        return {
+            "date": candle['Date'],
+            "open": candle['Open'],
+            "high": candle['High'],
+            "low": candle['Low'],
+            "close": candle['Close'],
+            "volume": candle['Volume'],
+            "type": signal_type
+        }
 
-    # Sort dates oldest to newest
-    sorted_dates = sorted(time_series.keys())
+    def detect_engulfing_patterns(self):
+        results = []
+        for i in range(self.trend_lookback + 1, len(self.data)):
+            prev_candle = self.data.iloc[i - 1]
+            curr_candle = self.data.iloc[i]
 
-    results = []
+            # Skip if any body is too small (noise candle)
+            if self._body_pct(prev_candle) < self.min_body_pct or self._body_pct(curr_candle) < self.min_body_pct:
+                continue
 
-    for idx in range(lookback, len(sorted_dates)):
-        date_prev = sorted_dates[idx - 1]
-        date_curr = sorted_dates[idx]
-        prev_candle = time_series[date_prev]
-        current_candle = time_series[date_curr]
+            close_series = self.data["Close"].iloc[i - self.trend_lookback - 1 : i - 1]
 
-        # Ensure we have enough previous candles for trend check
-        prev_candle_dates = sorted_dates[idx - lookback:idx]
-        if len(prev_candle_dates) < lookback:
-            continue
-        prev_candles = [time_series[d] for d in prev_candle_dates]
+            if self._is_bullish_engulfing(prev_candle, curr_candle) and is_downtrend(close_series):
+                signal_type = "bullish"
+            elif self._is_bearish_engulfing(prev_candle, curr_candle) and is_uptrend(close_series):
+                signal_type = "bearish"
+            else:
+                continue
 
-        # Bullish engulfing after downtrend
-        if is_downtrend(prev_candles) and is_bullish_engulfing(prev_candle, current_candle):
-            results.append({
-                "pattern": "Bullish Engulfing",
-                "date": date_curr,
-                "open": float(current_candle["1. open"]),
-                "high": float(current_candle["2. high"]),
-                "low": float(current_candle["3. low"]),
-                "close": float(current_candle["4. close"]),
-                "volume": int(current_candle["5. volume"]),
-                "entry_price": float(current_candle["4. close"]),
-                "stop_loss": min(float(prev_candle["3. low"]), float(current_candle["3. low"])),
-                "prev_candle_close": float(prev_candle["4. close"])
-            })
+            results.append(self._extract_candle_details(curr_candle, signal_type))
 
-        # Bearish engulfing after uptrend
-        if is_uptrend(prev_candles) and is_bearish_engulfing(prev_candle, current_candle):
-            results.append({
-                "pattern": "Bearish Engulfing",
-                "date": date_curr,
-                "open": float(current_candle["1. open"]),
-                "high": float(current_candle["2. high"]),
-                "low": float(current_candle["3. low"]),
-                "close": float(current_candle["4. close"]),
-                "volume": int(current_candle["5. volume"]),
-                "entry_price": float(current_candle["4. close"]),
-                "stop_loss": max(float(prev_candle["2. high"]), float(current_candle["2. high"])),
-                "prev_candle_close": float(prev_candle["4. close"])
-            })
-
-    return pd.DataFrame(results)
+        return pd.DataFrame(results)

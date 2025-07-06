@@ -1,115 +1,94 @@
 import pandas as pd
-from indicator.trend import is_downtrend
-import numpy as np
 
 def calculate_profit_loss(
-    data: dict,
+    data: pd.DataFrame,
     df_final: pd.DataFrame,
-    lookback: int,
     take_profit_pct: float,
     stop_pct: float,
-    trade_type: str
 ):
     """
-    For each detected pattern date, enter the next day:
-      - If prior lookback days form a downtrend, go LONG; else SHORT.
-      - Exit when profit or loss reaches stop_pct of entry price.
-      - Simulate day-by-day until exit.
-    Returns total P/L and list of trades.
+    For each detected Marubozu pattern, enter next day's open.
+      - If type == 'bullish', go LONG; else if 'bearish', go SHORT.
+      - Exit when profit or loss threshold is hit (TP or SL).
+    Returns total PnL and list of trades.
     """
     try:
-        # Convert data to DataFrame
-        if not data:
-            raise ValueError("Data is empty or invalid.")
+        if data is None or data.empty:
+            raise ValueError("Input price data is empty or invalid.")
 
-        df = pd.DataFrame.from_dict(data, orient='index')
-        if df.empty:
-            raise ValueError("DataFrame is empty after conversion.")
+        df = data.copy()
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'])
+            df.set_index('Date', inplace=True)
 
-        df = df.astype(float)
-        df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-        df.index = pd.to_datetime(df.index)
-
-        trades = []
+        df.sort_index(inplace=True)
         total_pnl = 0
+        trades = []
+        date_list = df.index.strftime('%Y-%m-%d').tolist()
 
-        # Ensure dates in df_final are sorted and valid
-        dates = df_final['date']
-        sorted_dates = [dt.strftime('%Y-%m-%d') for dt in df.index]
+        for _, row in df_final.iterrows():
+            signal_date = pd.to_datetime(row['date']).strftime('%Y-%m-%d')
+            signal_type = row['type'].lower()
 
-        for date in dates:
-            if date not in sorted_dates:
-                continue  # Skip invalid dates
+            if signal_date not in date_list:
+                continue
 
-            idx = sorted_dates.index(date)
-            if idx == 0:
-                continue  # Skip if no future data is available
+            idx = date_list.index(signal_date)
+            entry_idx = idx  # enter on same day
 
-            # Get previous candles for lookback period
-            prev_candle_str = sorted_dates[max(0, idx - lookback):idx]
-            prev_candles = [data[d] for d in prev_candle_str]
+            if entry_idx >= len(df):
+                continue  # No data available for entry
 
-            # Entry details
-            entry_idx = idx - 1
             entry_dt = df.index[entry_idx]
-            entry_price = df.at[entry_dt, 'Open']
+            entry_price = df.iloc[entry_idx]['Close']
 
-            # Determine trade direction and thresholds
-            if is_downtrend(prev_candles) and trade_type == "reversal":
+            if signal_type == 'bullish':
                 direction = 'long'
-                profit_target = entry_price * (1 + take_profit_pct)
-                stop_loss_level = entry_price * (1 - stop_pct)
-            elif is_downtrend(prev_candles) and trade_type == "continuation":
+                tp = entry_price * (1 + take_profit_pct)
+                sl = entry_price * (1 - stop_pct)
+            elif signal_type == 'bearish':
                 direction = 'short'
-                profit_target = entry_price * (1 - take_profit_pct)
-                stop_loss_level = entry_price * (1 + stop_pct)
+                tp = entry_price * (1 - take_profit_pct)
+                sl = entry_price * (1 + stop_pct)
             else:
-                if trade_type == "reversal":
-                    direction = 'short'
-                    profit_target = entry_price * (1 - take_profit_pct)
-                    stop_loss_level = entry_price * (1 + stop_pct)
-                else:
-                    direction = 'long'
-                    profit_target = entry_price * (1 + take_profit_pct)
-                    stop_loss_level = entry_price * (1 - stop_pct)
+                continue  # Invalid type
 
-            # Scan future days for exit
-            exit_dt = None
+            # Simulate each future day to find exit
             exit_price = None
-            for future_idx in range(entry_idx, -1, -1):
-                trade_dt = df.index[future_idx]
-                high = df.at[trade_dt, 'High']
-                low = df.at[trade_dt, 'Low']
+            exit_dt = None
+            for future_idx in range(entry_idx+1, len(df)):
+                future_row = df.iloc[future_idx]
+                future_dt = df.index[future_idx]
+                high = future_row['High']
+                low = future_row['Low']
 
                 if direction == 'long':
-                    if high >= profit_target:
-                        exit_price = profit_target
-                        exit_dt = trade_dt
+                    if high >= tp:
+                        exit_price = tp
+                        exit_dt = future_dt
                         break
-                    if low <= stop_loss_level:
-                        exit_price = stop_loss_level
-                        exit_dt = trade_dt
+                    elif low <= sl:
+                        exit_price = sl
+                        exit_dt = future_dt
                         break
-                else:  # short
-                    if low <= profit_target:
-                        exit_price = profit_target
-                        exit_dt = trade_dt
+                else:
+                    if low <= tp:
+                        exit_price = tp
+                        exit_dt = future_dt
                         break
-                    if high >= stop_loss_level:
-                        exit_price = stop_loss_level
-                        exit_dt = trade_dt
+                    elif high >= sl:
+                        exit_price = sl
+                        exit_dt = future_dt
                         break
 
-            # Fallback: exit at the last available close
-            if exit_dt is None:
-                exit_dt = df.index[0]
-                exit_price = df.at[exit_dt, 'Close']
+            # fallback to last candle
+            if exit_price is None:
+                exit_dt = df.index[-1]
+                exit_price = df.iloc[-1]['Close']
 
-            # Calculate PnL
             pnl = (exit_price - entry_price) if direction == 'long' else (entry_price - exit_price)
             total_pnl += pnl
 
-            # Record the trade
             trades.append({
                 'entry_date': entry_dt,
                 'entry_price': entry_price,
@@ -123,4 +102,4 @@ def calculate_profit_loss(
 
     except Exception as e:
         print(f"Error in calculate_profit_loss: {e}")
-        return 0, []
+        return 0.0, []

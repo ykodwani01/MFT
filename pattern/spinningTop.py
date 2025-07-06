@@ -1,60 +1,85 @@
+from indicator.trend import *
 import pandas as pd
-from indicator.trend import calculate_percentage_differences, calculate_candle_length_percentage
 
-def is_spinning_top(candle, 
-                    body_ratio_threshold=0.3, 
-                    shadow_diff_threshold=0.05):
-    open_price = float(candle["1. open"])
-    close_price = float(candle["4. close"])
-    high_price = float(candle["2. high"])
-    low_price = float(candle["3. low"])
+class SpinningTop:
+    def __init__(self, data, trend_lookback=7):
+        """
+        Initialize with yfinance DataFrame
+        data: pandas DataFrame with columns [Open, High, Low, Close, Adj Close, Volume]
+        """
+        self.data = data.reset_index()
+        self.trend_lookback = trend_lookback
 
-    body = abs(open_price - close_price)
-    total_range = high_price - low_price
+    def _is_spinning_top(self, candle, params):
+        open_price = candle['Open']
+        high_price = candle['High']
+        low_price = candle['Low']
+        close_price = candle['Close']
 
-    # Prevent division by zero
-    if total_range == 0:
-        return False
+        body_length = abs(close_price - open_price)
+        total_range = high_price - low_price
+        upper_wick = high_price - max(open_price, close_price)
+        lower_wick = min(open_price, close_price) - low_price
 
-    upper_wick = high_price - max(open_price, close_price)
-    lower_wick = min(open_price, close_price) - low_price
+        if total_range == 0:
+            return False  # Avoid division by zero
 
-    # 1. Small body
-    if body / total_range > body_ratio_threshold:
-        return False
+        body_pct = (body_length / total_range) * 100
+        upper_wick_pct = (upper_wick / total_range) * 100
+        lower_wick_pct = (lower_wick / total_range) * 100
 
-    # 2. Both wicks should be nearly equal
-    wick_diff_ratio = abs(upper_wick - lower_wick) / total_range
-    if wick_diff_ratio > shadow_diff_threshold:
-        return False
+        return (
+            body_pct <= params["max_body_pct"] and
+            upper_wick_pct >= params["min_wick_pct"] and
+            lower_wick_pct >= params["min_wick_pct"]
+        )
 
-    return True
+    def _extract_candle_details(self, candle, signal_type):
+        return {
+            "date": candle['Date'],
+            "open": candle['Open'],
+            "high": candle['High'],
+            "low": candle['Low'],
+            "close": candle['Close'],
+            "volume": candle['Volume'],
+            "type": signal_type
+        }
 
-def detect_spinning_tops(data,
-                         body_ratio_threshold=0.3,
-                         shadow_diff_threshold=0.05):
-    time_series = data.get("Time Series (Daily)", {})
-    results = []
+    def detect_spinning_tops(
+        self,
+        max_body_pct=30.0,
+        min_wick_pct=30.0
+    ):
+        """
+        Detect all trend-confirmed Spinning Top candles.
 
-    for date, candle in time_series.items():
-        if is_spinning_top(candle, body_ratio_threshold, shadow_diff_threshold):
-            results.append({
-                "date": date,
-                "open": float(candle["1. open"]),
-                "high": float(candle["2. high"]),
-                "low": float(candle["3. low"]),
-                "close": float(candle["4. close"]),
-                "volume": int(candle["5. volume"])
-            })
+        Returns:
+            pd.DataFrame: DataFrame of bullish/bearish spinning tops with trend context.
+        """
+        params = {
+            "max_body_pct": max_body_pct,
+            "min_wick_pct": min_wick_pct
+        }
 
-    return results
+        results = []
+        for i in range(self.trend_lookback, len(self.data)):
+            candle = self.data.iloc[i]
 
-def detect_all_spinning(data,
-                              body_ratio_threshold=0.2,
-                              shadow_diff_threshold=0.05):
-    spinning_tops = detect_spinning_tops(
-        data,
-        body_ratio_threshold,
-        shadow_diff_threshold
-    )
-    return pd.DataFrame(spinning_tops)
+            if not self._is_spinning_top(candle, params):
+                continue
+
+            # Determine trend based on close prices before the candle
+            close_series = self.data["Close"].iloc[i - self.trend_lookback:i]
+            dates = self.data["Date"].iloc[i - self.trend_lookback:i]
+            # print(close_series)
+            # print(dates)
+            if is_downtrend(close_series):
+                signal_type = "bullish"
+            elif is_uptrend(close_series):
+                signal_type = "bearish"
+            else:
+                continue  # Ignore if no clear trend
+
+            results.append(self._extract_candle_details(candle, signal_type))
+
+        return pd.DataFrame(results)

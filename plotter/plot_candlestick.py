@@ -1,23 +1,40 @@
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
-def plot_candlestick(data):
-    # Extract the time series data and convert it into a DataFrame
-    time_series = data.get("Time Series (Daily)", {})
 
-    # Convert the time series into a DataFrame
-    df = pd.DataFrame.from_dict(time_series, orient='index')
+def plot_candlestick(data: pd.DataFrame):
+    """
+    Plot candlestick chart from a DataFrame with columns: 
+    ['Open', 'High', 'Low', 'Close'] and optionally 'Date'.
+    """
 
-    # Convert all values to float and rename columns for mplfinance compatibility
-    df = df[['1. open', '2. high', '3. low', '4. close', '5. volume']].astype(float)
-    df.columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+    df = data.copy()
 
-    # Convert the index to datetime
-    df.index = pd.to_datetime(df.index)
-    fig = go.Figure(data=[go.Candlestick(x=df.index,
-                open=df['Open'],
-                high=df['High'],
-                low=df['Low'],
-                close=df['Close'])])
+    # Ensure datetime index
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+    else:
+        df.index = pd.to_datetime(df.index)
 
+    # Ensure columns are correctly named
+    required_cols = ['Open', 'High', 'Low', 'Close']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Data must contain {required_cols} columns.")
+
+    # Plot using Plotly
+    fig = go.Figure(data=[
+        go.Candlestick(
+            x=df.index,
+            open=df['Open'],
+            high=df['High'],
+            low=df['Low'],
+            close=df['Close']
+        )
+    ])
+    fig.update_layout(
+        title='Candlestick Chart',
+        xaxis_title='Date',
+        yaxis_title='Price',
+        xaxis_rangeslider_visible=False
+    )
     fig.show()
