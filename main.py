@@ -88,7 +88,7 @@ for symbol in stock_names:
     #ENGULFING PATTERN
     print("Engulfing Patterns")
     print(englufing_df)
-    total_profit_loss, trades = calculate_profit_loss(data, englufing_df, take_profit_pct=0.08, stop_pct=0.03)
+    total_profit_loss, trades = calculate_profit_loss(data, englufing_df, take_profit_pct=0.06, stop_pct=0.015)
     print(f"Total Profit/Loss: {total_profit_loss}")
     for trade in trades:
         print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, Engulfing Profit/Loss: {trade['pnl']}")
