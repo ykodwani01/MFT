@@ -11,6 +11,7 @@ from pattern.shootingStars import *
 # from pattern.engulfing import detect_all_engulfing
 from pattern.shootingStars import ShootingStar
 from plotter.plot_candlestick import plot_candlestick
+from pattern.rsi import RSI
 import yaml
 from pattern.engulfing import EngulfingPattern
 from pnl.findTrades import calculate_profit_loss
@@ -32,6 +33,7 @@ res1 = 0
 res2 = 0
 res3 = 0
 res4 = 0
+res5 = 0
 for symbol in stock_names:
     print(f"Fetching data for {symbol}")
     data = fetcher.fetch_data(symbol)
@@ -53,12 +55,9 @@ for symbol in stock_names:
 
     engulfig = EngulfingPattern(data)
     englufing_df = engulfig.detect_engulfing_patterns()
-    # englufing_df = detect_all_engulfing(
-    #     data
-    # )
-
-    # print(f"Detected  Candles for {symbol}:")
-    # # print(spinning_df)
+    
+    rsi_ind = RSI(data)
+    rsi_df = rsi_ind.calculate_rsi(window=5)
     # plot_candlestick(data)
     #Marubozu
     print(f"Marubozu Patterns for {symbol}:")
@@ -88,10 +87,20 @@ for symbol in stock_names:
     #ENGULFING PATTERN
     print("Engulfing Patterns")
     print(englufing_df)
-    total_profit_loss, trades = calculate_profit_loss(data, englufing_df, take_profit_pct=0.06, stop_pct=0.015)
+    total_profit_loss, trades = calculate_profit_loss(data, englufing_df, take_profit_pct=0.03, stop_pct=0.01)
     print(f"Total Profit/Loss: {total_profit_loss}")
     for trade in trades:
         print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, Engulfing Profit/Loss: {trade['pnl']}")
     res4 += total_profit_loss
 
-print("Net from all stocks" ,res1,res2,res3,res4)
+
+    #RSI INDICATOR
+    print(f"RSI Patterns for {symbol}:")
+    print(rsi_df)
+    total_profit_loss,trades = calculate_profit_loss(data, rsi_df, take_profit_pct=0.06, stop_pct=0.03)
+    print(f"Total Profit/Loss: {total_profit_loss}")
+    for trade in trades:
+        print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, RSI Profit/Loss: {trade['pnl']}")
+    res5 += total_profit_loss
+
+print("Net from all stocks" ,res1,res2,res3,res4,res5)

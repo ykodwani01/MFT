@@ -1,4 +1,5 @@
 import pandas as pd
+import ta  # Make sure ta is installed
 
 def calculate_profit_loss(
     data: pd.DataFrame,
@@ -7,8 +8,10 @@ def calculate_profit_loss(
     stop_pct: float,
 ):
     """
-    For each detected Marubozu pattern, enter next day's open.
-      - If type == 'bullish', go LONG; else if 'bearish', go SHORT.
+    For each detected pattern, use both signal type and RSI(window=7) for direction:
+      - If signal_type == 'bullish' and RSI < 70, go LONG.
+      - If signal_type == 'bearish' and RSI >= 30, go SHORT.
+      - Otherwise, skip the trade.
       - Exit when profit or loss threshold is hit (TP or SL).
     Returns total PnL and list of trades.
     """
@@ -42,7 +45,9 @@ def calculate_profit_loss(
             entry_dt = df.index[entry_idx]
             entry_price = df.iloc[entry_idx]['Close']
 
-            if signal_type == 'bullish':
+
+            # Use both signal type and RSI for direction
+            if signal_type == 'bullish' :
                 direction = 'long'
                 tp = entry_price * (1 + take_profit_pct)
                 sl = entry_price * (1 - stop_pct)
@@ -51,7 +56,7 @@ def calculate_profit_loss(
                 tp = entry_price * (1 - take_profit_pct)
                 sl = entry_price * (1 + stop_pct)
             else:
-                continue  # Invalid type
+                continue  # Skip trade if conditions not met
 
             # Simulate each future day to find exit
             exit_price = None
