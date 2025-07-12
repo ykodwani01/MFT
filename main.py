@@ -19,6 +19,9 @@ import yfinance as yf
 
 from config.config import Config
 from data.fetcher import Fetcher
+from indicator.macd import MACD
+from indicator.hull import HullMovingAverage
+from indicator.stochastic import StochasticOscillator
 from pattern.marubozu import Marubozu
 from pattern.spinningTop import SpinningTop
 load_dotenv()
@@ -34,6 +37,10 @@ res2 = 0
 res3 = 0
 res4 = 0
 res5 = 0
+res6 = 0
+res7 = 0
+res8 = 0
+
 for symbol in stock_names:
     print(f"Fetching data for {symbol}")
     data = fetcher.fetch_data(symbol)
@@ -58,6 +65,15 @@ for symbol in stock_names:
     
     rsi_ind = RSI(data)
     rsi_df = rsi_ind.calculate_rsi(window=5)
+
+    macd_ind = MACD(data)
+    macd_df = macd_ind.calculate_macd()
+
+    hull_ind = HullMovingAverage(data)
+    hull_df = hull_ind.calculate_hull()
+
+    stochastic_ind = StochasticOscillator(data)
+    stochastic_df = stochastic_ind.calculate_stochastic()
     # plot_candlestick(data)
     #Marubozu
     print(f"Marubozu Patterns for {symbol}:")
@@ -103,4 +119,31 @@ for symbol in stock_names:
         print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, RSI Profit/Loss: {trade['pnl']}")
     res5 += total_profit_loss
 
-print("Net from all stocks" ,res1,res2,res3,res4,res5)
+    #MACD INDICATOR
+    print(f"MACD Patterns for {symbol}:")
+    print(macd_df)
+    total_profit_loss,trades = calculate_profit_loss(data, macd_df, take_profit_pct=0.06, stop_pct=0.03)
+    print(f"Total Profit/Loss: {total_profit_loss}")
+    for trade in trades:
+        print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, MACD Profit/Loss: {trade['pnl']}")
+    res6 += total_profit_loss
+
+    #HULL INDICATOR
+    print(f"HULL Patterns for {symbol}:")
+    print(hull_df)
+    total_profit_loss,trades = calculate_profit_loss(data, hull_df, take_profit_pct=0.06, stop_pct=0.03)
+    print(f"Total Profit/Loss: {total_profit_loss}")
+    for trade in trades:
+        print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, HULL Profit/Loss: {trade['pnl']}")
+    res7 += total_profit_loss
+
+    #STOCHASTIC INDICATOR
+    print(f"STOCHASTIC Patterns for {symbol}:")
+    print(stochastic_df)
+    total_profit_loss,trades = calculate_profit_loss(data, stochastic_df, take_profit_pct=0.06, stop_pct=0.03)
+    print(f"Total Profit/Loss: {total_profit_loss}")
+    for trade in trades:
+        print(f"Buy on {trade['entry_date']} at {trade['entry_price']}, Sell on {trade['exit_date']} at {trade['exit_price']}, STOCHASTIC Profit/Loss: {trade['pnl']}")
+    res8 += total_profit_loss
+
+print("Net from all stocks" ,res1,res2,res3,res4,res5,res6,res7,res8)
