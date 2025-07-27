@@ -7,6 +7,25 @@ from live.trading import place_order
 from data.fetcher import Fetcher
 from config.config import Config
 
+from live.api import get_trade_history
+from live.trading import _get_positions, _save_positions
+
+def check_order_fulfillment():
+    """Checks if any open orders have been fulfilled."""
+    print("Checking order fulfillment...")
+    trade_history = get_trade_history()
+    positions = _get_positions()
+
+    for i, position in enumerate(positions):
+        if position["status"] == "open":
+            for trade in trade_history:
+                if trade["symbol"] == position["symbol"] and trade["status"] == "executed":
+                    positions[i]["status"] = "closed"
+                    print(f"Order for {position['symbol']} has been executed.")
+                    break
+
+    _save_positions(positions)
+
 def main():
     config = Config()
     fetcher = Fetcher()
@@ -26,3 +45,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    check_order_fulfillment()

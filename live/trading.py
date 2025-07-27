@@ -3,12 +3,15 @@
 
 import json
 import os
+from live.api import place_order as api_place_order
 
 POSITIONS_FILE = "positions.json"
 
 def place_order(symbol, signal, price, target_price):
     """Places a new order."""
+    order_id = api_place_order(symbol, signal, price, target_price)
     order = {
+        "order_id": order_id,
         "symbol": symbol,
         "signal": signal,
         "price": price,
