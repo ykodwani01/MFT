@@ -1,0 +1,9 @@
+{
+  "name": "trading-cron",
+  "version": "1.0.0",
+  "description": "A cron job for placing trades.",
+  "main": "cron.js",
+  "dependencies": {
+    "node-cron": "^3.0.0"
+  }
+}
